@@ -13,28 +13,16 @@ use QueSoft\Ntak\Responses\NTAKVerifyResponse;
 
 class NTAK
 {
-    protected      $client;
-    protected      $when;
+    public const int DRS_AMOUNT = 50;
 
-    /**
-     * __construct
-     *
-     * @param  NTAKClient $client
-     * @param  Carbon     $when
-     * @return void
-     */
     public function __construct(
-        NTAKClient $client,
-        Carbon $when
+        public readonly NTAKClient $client,
+        protected Carbon $when,
     ) {
-        $this->client = $client;
-        $this->when   = $when;
     }
 
     /**
-     * Lists the categories
-     *
-     * @return array|NTAKCategory[]
+     * @return list<NTAKCategory>
      */
     public static function categories(): array
     {
@@ -42,107 +30,79 @@ class NTAK
     }
 
     /**
-     * Lists the subcategories of a category
-     *
-     * @param  NTAKCategory $category
-     * @return array|NTAKSubcategory[]
+     * @return list<NTAKSubcategory>
      */
     public static function subcategories(NTAKCategory $category): array
     {
         return $category->subcategories();
     }
 
-    /**
-     * message
-     *
-     * @param  NTAKClient $client
-     * @param  Carbon     $when
-     * @return NTAK
-     */
-    public static function message(NTAKClient $client, Carbon $when): NTAK
+    public static function message(NTAKClient $client, Carbon $when): self
     {
         return new static($client, $when);
     }
 
-    /**
-     * fake
-     *
-     * @param  array $expectedResponse
-     * @return NTAK
-     */
-    public function fake(array $expectedResponse): NTAK
+    public function fake(array $expectedResponse): self
     {
         $this->client->fakeResponse($expectedResponse);
+
         return $this;
     }
 
-    /**
-     * handleOrder
-     *
-     * @param  NTAKOrder $ntakOrders
-     * @return string
-     */
     public function handleOrder(NTAKOrder ...$ntakOrders): string
     {
         $orders = [];
+
         foreach ($ntakOrders as $ntakOrder) {
             $orders[] = [
-                'rendelesBesorolasa'           => $ntakOrder->orderType->getKey(),
-                'rmsRendelesAzonosito'         => $ntakOrder->orderId,
-                'hivatkozottRendelesOsszesito' => $ntakOrder->orderType == NTAKOrderType::NORMAL()
+                'rendelesBesorolasa' => $ntakOrder->orderType->name,
+                'rmsRendelesAzonosito' => $ntakOrder->orderId,
+                'hivatkozottRendelesOsszesito' => $ntakOrder->orderType === NTAKOrderType::NORMAL
                     ? null
                     : $ntakOrder->ntakOrderId,
-                'targynap'                     => $ntakOrder->end->format('Y-m-d'),
-                'rendelesKezdete'              => $ntakOrder->orderType == NTAKOrderType::SZTORNO()
+                'targynap' => $ntakOrder->end->format('Y-m-d'),
+                'rendelesKezdete' => $ntakOrder->orderType === NTAKOrderType::SZTORNO
                     ? null
                     : $ntakOrder->start->timezone('Europe/Budapest')->toIso8601String(),
-                'rendelesVege'                 => $ntakOrder->orderType == NTAKOrderType::SZTORNO()
+                'rendelesVege' => $ntakOrder->orderType === NTAKOrderType::SZTORNO
                     ? null
                     : $ntakOrder->end->timezone('Europe/Budapest')->toIso8601String(),
-                'helybenFogyasztott'           => $ntakOrder->isAtTheSpot,
-                'osszesitett'                  => $ntakOrder->orderType == NTAKOrderType::NORMAL()
+                'helybenFogyasztott' => $ntakOrder->isAtTheSpot,
+                'osszesitett' => $ntakOrder->orderType === NTAKOrderType::NORMAL
                     ? $ntakOrder->aggregated
                     : false,
-                'osszesitettIndoklasa'         => ($ntakOrder->orderType == NTAKOrderType::NORMAL() && $ntakOrder->aggregated === true)
-                    ? $ntakOrder->aggregatedCause->getKey()
+                'osszesitettIndoklasa' => ($ntakOrder->orderType === NTAKOrderType::NORMAL && $ntakOrder->aggregated === true)
+                    ? $ntakOrder->aggregatedCause?->name
                     : null,
-                'fizetesiInformaciok'          => $ntakOrder->orderType == NTAKOrderType::SZTORNO()
+                'fizetesiInformaciok' => $ntakOrder->orderType === NTAKOrderType::SZTORNO
                     ? null
                     : [
-                        'rendelesVegosszegeHUF' => $ntakOrder->totalWithDiscount(),
-                        'fizetesiModok'         => $ntakOrder->buildPaymentTypes(),
+                        'rendelesVegosszegeHUF' => (int) round($ntakOrder->paymentsTotal()),
+                        'fizetesiModok' => $ntakOrder->buildPaymentTypes(),
                     ],
-                'rendelesTetelek'              => $ntakOrder->orderType == NTAKOrderType::SZTORNO()
+                'rendelesTetelek' => $ntakOrder->orderType === NTAKOrderType::SZTORNO
                     ? null
                     : $ntakOrder->buildOrderItems(),
             ];
         }
 
-        $message = [
-            'rendelesOsszesitok' => $orders,
-        ];
-
         return $this->client->message(
-            $message,
+            ['rendelesOsszesitok' => $orders],
             $this->when,
             '/rms/rendeles-osszesito'
         )['feldolgozasAzonosito'];
     }
 
     /**
-     * resendMessage - Resend previously sent message.
-     * Requires decoded array contents from 
-     * previously sent request's lastRequest message.
-     * Useful when you need to resend order or close by verify request.
-     * IMPORTANT to set message object when parameter to exactly the same timestamp of previous message!
+     * Resend a previously sent message.
+     * Requires decoded array contents from the previous request's lastRequest message.
+     * Set $when to exactly the same timestamp as the previous message.
      *
-     * @param  array[] $message
-     * @param bool $order
-     * @return string
+     * @param  array<string, mixed>  $message
      */
-    public function resendMessage($message = [], $order = true): string
-    {    
-        $uri = ($order) ? '/rms/rendeles-osszesito' : '/rms/napi-zaras';
+    public function resendMessage(array $message = [], bool $order = true): string
+    {
+        $uri = $order ? '/rms/rendeles-osszesito' : '/rms/napi-zaras';
 
         return $this->client->message(
             $message,
@@ -151,32 +111,23 @@ class NTAK
         )['feldolgozasAzonosito'];
     }
 
-    /**
-     * closeDay
-     *
-     * @param  Carbon      $start
-     * @param  Carbon      $end
-     * @param  NTAKDayType $dayType
-     * @param  int         $tips
-     * @return string
-     */
     public function closeDay(
-        Carbon      $start,
-        ?Carbon     $end = null,
+        Carbon $start,
+        ?Carbon $end,
         NTAKDayType $dayType,
-        int         $tips = 0
+        int $tips = 0,
     ): string {
         $message = [
             'zarasiInformaciok' => [
-                'targynap'           => $start->format('Y-m-d'),
-                'targynapBesorolasa' => $dayType->getKey(),
-                'nyitasIdopontja'    => $dayType != NTAKDayType::ADOTT_NAPON_ZARVA()
+                'targynap' => $start->format('Y-m-d'),
+                'targynapBesorolasa' => $dayType->name,
+                'nyitasIdopontja' => $dayType !== NTAKDayType::ADOTT_NAPON_ZARVA
                     ? $start->timezone('Europe/Budapest')->toIso8601String()
                     : null,
-                'zarasIdopontja'     => $dayType != NTAKDayType::ADOTT_NAPON_ZARVA()
-                    ? $end->timezone('Europe/Budapest')->toIso8601String()
+                'zarasIdopontja' => $dayType !== NTAKDayType::ADOTT_NAPON_ZARVA
+                    ? $end?->timezone('Europe/Budapest')->toIso8601String()
                     : null,
-                'osszesBorravalo'    => $tips,
+                'osszesBorravalo' => $tips,
             ],
         ];
 
@@ -187,34 +138,43 @@ class NTAK
         )['feldolgozasAzonosito'];
     }
 
-    /**
-     * verify
-     *
-     * @param  string $processId
-     * @return NTAKVerifyResponse
-     */
-    public function verify(
-        string $processId
-    ): NTAKVerifyResponse {
-        $message = [
-            'feldolgozasAzonositok' => [
-                [
-                    'feldolgozasAzonosito' => $processId,
-                ]
-            ],
-        ];
+    public function verify(string $processId): NTAKVerifyResponse
+    {
+        return $this->verifyAll([$processId])[0];
+    }
 
-        $response = $this->client->message(
-            $message,
+    /**
+     * @param  list<string>  $processIds
+     * @return list<NTAKVerifyResponse>
+     */
+    public function verifyAll(array $processIds): array
+    {
+        $messageContent = [];
+
+        foreach ($processIds as $processId) {
+            $messageContent[] = [
+                'feldolgozasAzonosito' => $processId,
+            ];
+        }
+
+        $responses = $this->client->message(
+            ['feldolgozasAzonositok' => $messageContent],
             $this->when,
             '/rms/ellenorzes'
-        )['uzenetValaszok'][0];
+        )['uzenetValaszok'];
 
-        return new NTAKVerifyResponse(
-            $response['sikeresUzenetek'] ?? [],
-            $response['sikertelenUzenetek'] ?? [],
-            $response['fejlecHibak'] ?? [],
-            new NTAKVerifyStatus($response['statusz'])
-        );
+        $verifyResponses = [];
+
+        foreach ($responses as $response) {
+            $verifyResponses[] = new NTAKVerifyResponse(
+                successfulMessages: $response['sikeresUzenetek'] ?? [],
+                unsuccessfulMessages: $response['sikertelenUzenetek'] ?? [],
+                headerErrors: $response['fejlecHibak'] ?? [],
+                status: NTAKVerifyStatus::from($response['statusz']),
+                processId: $response['feldolgozasAzonosito'],
+            );
+        }
+
+        return $verifyResponses;
     }
 }

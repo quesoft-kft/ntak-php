@@ -2,47 +2,46 @@
 
 namespace QueSoft\Ntak\Enums;
 
-use MyCLabs\Enum\Enum;
-use QueSoft\Ntak\Traits\EnumToArray;
+use QueSoft\Ntak\Traits\EnumHelpers;
 
-final class NTAKSubcategory extends Enum
+enum NTAKSubcategory: string
 {
-    use EnumToArray;
+    use EnumHelpers;
 
-    const REGGELI = 'reggeli';
-    const SZENDVICS = 'szendvics';
-    const ELOETEL = 'előétel';
-    const LEVES = 'leves';
-    const FOETEL = 'főétel';
-    const KORET = 'köret';
-    const SAVANYUSAG_SALATA = 'savanyúság/saláta';
-    const KOSTOLO = 'kóstolóétel, kóstolófalat';
-    const PEKSUTEMENY = 'péksütemény, pékáru';
-    const DESSZERT = 'desszert';
-    const SNACK = 'snack';
-    const FOETEL_KORETTEL = 'főétel körettel';
-    const ETELCSOMAG = 'ételcsomag';
-    const EGYEB = 'egyéb';
-    const VIZ = 'víz';
-    const LIMONADE_SZORP_FACSART = 'limonádé / szörp / frissen facsart ital';
-    const ALKOHOLMENTES_KOKTEL = 'alkoholmentes koktél, alkoholmentes kevert ital';
-    const TEA_FORROCSOKOLADE = 'tea, forrócsoki és egyéb tejalapú italok';
-    const ITALCSOMAG = 'italcsomag';
-    const KAVE = 'kávé';
-    const ROSTOS_UDITO = 'rostos üdítő';
-    const SZENSAVAS_UDITO = 'szénsavas üdítő';
-    const SZENSAVMENTES_UDITO = 'szénsavmentes üdítő ';
-    const KOKTEL = 'koktél, kevert ital';
-    const LIKOR = 'likőr';
-    const PARLAT = 'párlat';
-    const SOR = 'sör';
-    const BOR = 'bor';
-    const PEZSGO = 'pezsgő';
-    const SZERVIZDIJ = 'szervizdíj';
-    const BORRAVALO = 'borravaló';
-    const KISZALLITASI_DIJ = 'kiszállítási díj';
-    const NEM_VENDEGLATAS = 'nem vendéglátás';
-    const KORNYEZETBARAT_CSOMAGOLAS = 'környezetbarát csomagolás';
-    const MUANYAG_CSOMAGOLAS = 'műanyag csomagolás';
-    const KEDVEZMENY = 'kedvezmény';
+    case REGGELI = 'reggeli';
+    case SZENDVICS = 'szendvics';
+    case ELOETEL = 'előétel';
+    case LEVES = 'leves';
+    case FOETEL = 'főétel';
+    case KORET = 'köret';
+    case SAVANYUSAG_SALATA = 'savanyúság/saláta';
+    case KOSTOLO = 'kóstolóétel, kóstolófalat';
+    case PEKSUTEMENY = 'péksütemény, pékáru';
+    case DESSZERT = 'desszert';
+    case SNACK = 'snack';
+    case FOETEL_KORETTEL = 'főétel körettel';
+    case ETELCSOMAG = 'ételcsomag';
+    case EGYEB = 'egyéb';
+    case VIZ = 'víz';
+    case LIMONADE_SZORP_FACSART = 'limonádé / szörp / frissen facsart ital';
+    case ALKOHOLMENTES_KOKTEL = 'alkoholmentes koktél, alkoholmentes kevert ital';
+    case TEA_FORROCSOKOLADE = 'tea, forrócsoki és egyéb tejalapú italok';
+    case ITALCSOMAG = 'italcsomag';
+    case KAVE = 'kávé';
+    case ROSTOS_UDITO = 'rostos üdítő';
+    case SZENSAVAS_UDITO = 'szénsavas üdítő';
+    case SZENSAVMENTES_UDITO = 'szénsavmentes üdítő';
+    case KOKTEL = 'koktél, kevert ital';
+    case LIKOR = 'likőr';
+    case PARLAT = 'párlat';
+    case SOR = 'sör';
+    case BOR = 'bor';
+    case PEZSGO = 'pezsgő';
+    case SZERVIZDIJ = 'szervizdíj';
+    case BORRAVALO = 'borravaló';
+    case KISZALLITASI_DIJ = 'kiszállítási díj';
+    case NEM_VENDEGLATAS = 'nem vendéglátás';
+    case KORNYEZETBARAT_CSOMAGOLAS = 'környezetbarát csomagolás';
+    case MUANYAG_CSOMAGOLAS = 'műanyag csomagolás';
+    case KEDVEZMENY = 'kedvezmény';
 }

@@ -2,15 +2,15 @@
 
 namespace QueSoft\Ntak\Enums;
 
-use MyCLabs\Enum\Enum;
-use QueSoft\Ntak\Traits\EnumToArray;
+use QueSoft\Ntak\Traits\EnumHelpers;
 
-final class NTAKAmount extends Enum
+enum NTAKAmount: string
 {
-    use EnumToArray;
+    use EnumHelpers;
 
-    const DARAB = 'darab';
-    const LITER = 'liter';
-    const KILOGRAMM = 'kilogramm';
-    const EGYSEG = 'egyseg';
+    case DARAB = 'darab';
+    case LITER = 'liter';
+    case KILOGRAMM = 'kilogramm';
+    case EGYSEG = 'egyseg';
+    case ADAG = 'adag';
 }

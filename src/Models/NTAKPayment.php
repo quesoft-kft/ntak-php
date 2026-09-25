@@ -6,51 +6,39 @@ use QueSoft\Ntak\Enums\NTAKPaymentType;
 
 class NTAKPayment
 {
-    protected $round = 0;
-    public $paymentType;
-    public $total;
+    protected int $round = 0;
 
-    /**
-     * __construct
-     *
-     * @param  NTAKPaymentType $paymentType
-     * @return void
-     */
     public function __construct(
-        NTAKPaymentType $paymentType,
-        int             $total
+        public readonly NTAKPaymentType $paymentType,
+        public readonly float $total,
     ) {
-        $this->paymentType = $paymentType;
-        $this->total       = $total;
     }
 
     /**
-     * buildRequest
-     *
-     * @return array
+     * @return array{fizetesiMod: string, fizetettOsszegHUF: int|float}
      */
     public function buildRequest(): array
     {
         $rounded = 0;
+        $isCash = in_array($this->paymentType, [
+            NTAKPaymentType::KESZPENZHUF,
+            NTAKPaymentType::KESZPENZEUR,
+        ], true);
+
         $request = [
-            'fizetesiMod'       => $this->paymentType->getKey(),
-            'fizetettOsszegHUF' => $this->paymentType != NTAKPaymentType::KESZPENZHUF()
-                ? $this->total
-                : $rounded = (int) round($this->total / 5) * 5
+            'fizetesiMod' => $this->paymentType->name,
+            'fizetettOsszegHUF' => $isCash
+                ? $rounded = (int) (round($this->total / 5) * 5)
+                : round($this->total),
         ];
 
-        if ($this->paymentType == NTAKPaymentType::KESZPENZHUF()) {
-            $this->round = $this->total - $rounded;
+        if ($isCash) {
+            $this->round = (int) ($this->total - $rounded);
         }
 
         return $request;
     }
 
-    /**
-     * round getter
-     *
-     * @return int
-     */
     public function round(): int
     {
         return $this->round;

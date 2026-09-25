@@ -2,11 +2,13 @@
 
 namespace QueSoft\Ntak\Enums;
 
-use MyCLabs\Enum\Enum;
+use QueSoft\Ntak\Traits\EnumHelpers;
 
-final class NTAKOrderType extends Enum
+enum NTAKOrderType: string
 {
-    const NORMAL = 'Normál';
-    const SZTORNO = 'Storno';
-    const HELYESBITO = 'Helyesbítő';
+    use EnumHelpers;
+
+    case NORMAL = 'Normál';
+    case SZTORNO = 'Storno';
+    case HELYESBITO = 'Helyesbítő';
 }

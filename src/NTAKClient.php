@@ -5,86 +5,58 @@ namespace QueSoft\Ntak;
 use Carbon\Carbon;
 use Gamegos\JWS\JWS;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
 use QueSoft\Ntak\Exceptions\NTAKClientException;
 
 class NTAKClient
 {
-    protected      $taxNumber;
-    protected      $regNumber;
-    protected      $softwareRegNumber;
-    protected      $version;
-    protected      $certPath;
-    protected      $testing;
+    protected Client $client;
+    protected ?Carbon $when = null;
+    protected string $url;
+    protected ?array $lastRequest = null;
+    protected ?array $lastResponse = null;
+    protected ?int $lastRequestTime = null;
+    protected ?array $fakeResponse = null;
 
-    protected      $client;
-    protected      $when;
-    protected      $url;
-    protected      $lastRequest;
-    protected      $lastResponse;
-    protected      $lastRequestTime; // milliseconds
-    protected      $fakeResponse = null;
+    protected static string $prodUrl = 'https://rms.ntak.hu/';
+    protected static string $testUrl = 'https://rms.tesztntak.hu';
 
-    protected static $prodUrl = 'https://rms.ntak.hu/';
-    protected static $testUrl = 'https://rms.tesztntak.hu';
-
-    /**
-     * __construct
-     *
-     * @param  string $taxNumber
-     * @param  string $regNumber
-     * @param  string $softwareRegNumber
-     * @param  string $version
-     * @param  string $certPath
-     * @param  bool   $testing
-     * @return void
-     */
     public function __construct(
-        string $taxNumber,
-        string $regNumber,
-        string $softwareRegNumber,
-        string $version,
-        string $certPath,
-        bool   $testing = false
+        protected string $taxNumber,
+        protected string $regNumber,
+        protected string $softwareRegNumber,
+        protected string $version,
+        protected string $certPath,
+        protected bool $testing = false,
     ) {
-        $this->taxNumber         = $taxNumber;
-        $this->regNumber         = $regNumber;
-        $this->softwareRegNumber = $softwareRegNumber;
-        $this->version           = $version;
-        $this->certPath          = $certPath;
-        $this->testing           = $testing;
-
         $this->url = $testing
             ? self::$testUrl
             : self::$prodUrl;
 
         $this->client = new Client([
             'base_uri' => $this->url,
-            'cert'     => $certPath,
-            'ssl_key'  => $certPath,
-            'verify'   => false,
+            'cert' => $certPath,
+            'ssl_key' => $certPath,
+            'verify' => false,
+            'timeout' => 30.0,
+            'connect_timeout' => 20.0,
         ]);
     }
 
-    /**
-     * fakeResponse
-     *
-     * @return NTAKClient
-     */
-    public function fakeResponse(array $response): NTAKClient
+    public function fakeResponse(array $response): self
     {
         $this->fakeResponse = $response;
+
         return $this;
     }
 
     /**
-     * message
+     * @param  array<string, mixed>  $message
+     * @return array<string, mixed>
      *
-     * @param  array  $message
-     * @param  Carbon $when
-     * @param  string $uri
-     * @return array
+     * @throws NTAKClientException
+     * @throws GuzzleException
      */
     public function message(array $message, Carbon $when, string $uri): array
     {
@@ -97,129 +69,105 @@ class NTAKClient
 
         $headers = $this->requestHeaders($json);
 
-        // Send request with guzzle
         try {
             $this->lastRequest = $json;
 
             $start = Carbon::now();
 
             $response = $this->fakeResponse
-                ?: $this->client->request(
-                    'post',
+                ?? $this->client->request(
+                    'POST',
                     $uri,
                     compact('json', 'headers')
                 );
 
-            $this->lastRequestTime = Carbon::now()->diffInMilliseconds($start);
+            $this->lastRequestTime = (int) Carbon::now()->diffInMilliseconds($start);
         } catch (RequestException $e) {
             throw new NTAKClientException(
-                $e->getResponse()->getBody()->getContents()
-            );
-        } catch (ClientException $e) {
-            throw new NTAKClientException(
-                $e->getMessage()
+                $e->hasResponse()
+                    ? $e->getResponse()->getBody()->getContents()
+                    : $e->getMessage(),
+                previous: $e
             );
         }
 
         return $this->lastResponse = is_array($response)
             ? $response
-            : json_decode($response->getBody(), true) ?? [];
+            : (json_decode((string) $response->getBody(), true) ?? []);
     }
 
-    /**
-     * prodUrl
-     *
-     * @return string
-     */
     public static function prodUrl(): string
     {
         return self::$prodUrl;
     }
 
-    /**
-     * testUrl
-     *
-     * @return string
-     */
     public static function testUrl(): string
     {
         return self::$testUrl;
     }
 
     /**
-     * requestHeaders
-     *
-     * @param  array $message
-     * @return array
+     * @param  array<string, mixed>  $message
+     * @return array{x-jws-signature: string, x-certificate: string}
      */
     protected function requestHeaders(array $message): array
     {
+        $privateKey = openssl_pkey_get_private(
+            (string) file_get_contents($this->certPath)
+        );
+
         $jws = (new JWS())->encode(
             [
                 'alg' => 'RS256',
-                'typ' => 'JWS'
+                'typ' => 'JWS',
             ],
             $message,
-            openssl_pkey_get_private(file_get_contents($this->certPath))
+            $privateKey
         );
 
         $tmp = explode('.', $jws);
 
-        openssl_x509_export(file_get_contents($this->certPath), $tmpCert);
+        openssl_x509_export(
+            (string) file_get_contents($this->certPath),
+            $tmpCert
+        );
 
         return [
             'x-jws-signature' => $tmp[0].'..'.$tmp[2],
-            'x-certificate'   => base64_encode($tmpCert)
+            'x-certificate' => base64_encode($tmpCert),
         ];
     }
 
     /**
-     * header
-     *
-     * @return array
+     * @return array<string, mixed>
      */
     protected function header(): array
     {
         return [
-            'szolgaltatoAdatok'   => [
-                'adoszam'                => $this->taxNumber,
+            'szolgaltatoAdatok' => [
+                'adoszam' => $this->taxNumber,
                 'vendeglatoUzletRegSzam' => $this->regNumber,
             ],
-            'uzenetAdatok'        => [
+            'uzenetAdatok' => [
                 'uzenetKuldesIdeje' => $this->when->timezone('Europe/Budapest')->toIso8601String(),
             ],
             'kuldoRendszerAdatok' => [
                 'rmsRendszerNTAKAzonosito' => $this->softwareRegNumber,
-                'rmsRendszerVerzioszam'    => $this->version,
-            ]
+                'rmsRendszerVerzioszam' => $this->version,
+            ],
         ];
     }
 
-    /**
-     * lastRequest getter
-     *
-     * @return array|null
-     */
     public function lastRequest(): ?array
     {
         return $this->lastRequest;
     }
 
-    /**
-     * lastResponse getter
-     *
-     * @return array
-     */
     public function lastResponse(): ?array
     {
         return $this->lastResponse;
     }
 
-    /**
-     * lastRequestTime getter (ms)
-     *
-     * @return int
-     */
     public function lastRequestTime(): ?int
     {
         return $this->lastRequestTime;

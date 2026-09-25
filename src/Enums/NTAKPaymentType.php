@@ -2,20 +2,19 @@
 
 namespace QueSoft\Ntak\Enums;
 
-use MyCLabs\Enum\Enum;
-use QueSoft\Ntak\Traits\EnumToArray;
+use QueSoft\Ntak\Traits\EnumHelpers;
 
-final class NTAKPaymentType extends Enum
+enum NTAKPaymentType: string
 {
-    use EnumToArray;
+    use EnumHelpers;
 
-    const KESZPENZHUF = 'Készpénz huf';
-    const KESZPENZEUR = 'Készpénz eur';
-    const SZEPKARTYA = 'Szépkártya';
-    const BANKKARTYA = 'Bankkártya';
-    const ATUTALAS = 'Átutalás';
-    const EGYEB = 'Egyéb';
-    const VOUCHER = 'Voucher';
-    const SZOBAHITEL = 'Szobahitel';
-    const KEREKITES = 'Kerekítés';
+    case KESZPENZHUF = 'Készpénz huf';
+    case KESZPENZEUR = 'Készpénz eur';
+    case SZEPKARTYA = 'Szépkártya';
+    case BANKKARTYA = 'Bankkártya';
+    case ATUTALAS = 'Átutalás';
+    case EGYEB = 'Egyéb';
+    case VOUCHER = 'Voucher';
+    case SZOBAHITEL = 'Szobahitel';
+    case KEREKITES = 'Kerekítés';
 }

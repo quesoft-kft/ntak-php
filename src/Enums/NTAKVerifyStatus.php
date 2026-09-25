@@ -2,16 +2,15 @@
 
 namespace QueSoft\Ntak\Enums;
 
-use MyCLabs\Enum\Enum;
-use QueSoft\Ntak\Traits\EnumToArray;
+use QueSoft\Ntak\Traits\EnumHelpers;
 
-final class NTAKVerifyStatus extends Enum
+enum NTAKVerifyStatus: string
 {
-    use EnumToArray;
+    use EnumHelpers;
 
-    const BEFOGADVA = 'BEFOGADVA';
-    const TELJESEN_HIBAS = 'TELJESEN_HIBAS';
-    const RESZBEN_SIKERES = 'RESZBEN_SIKERES';
-    const TELJESEN_SIKERES = 'TELJESEN_SIKERES';
-    const UJRA_KULDENDO = 'UJRA_KULDENDO';
+    case BEFOGADVA = 'BEFOGADVA';
+    case TELJESEN_HIBAS = 'TELJESEN_HIBAS';
+    case RESZBEN_SIKERES = 'RESZBEN_SIKERES';
+    case TELJESEN_SIKERES = 'TELJESEN_SIKERES';
+    case UJRA_KULDENDO = 'UJRA_KULDENDO';
 }

@@ -6,47 +6,25 @@ use QueSoft\Ntak\Enums\NTAKVerifyStatus;
 
 class NTAKVerifyResponse
 {
-    public       $successfulMessages;
-    public       $unsuccessfulMessages;
-    public       $headerErrors;
-    public       $status;
-
     /**
-     * __construct
-     *
-     * @param  array            $successfulMessages
-     * @param  array            $unsuccessfulMessages
-     * @param  array            $headerErrors
-     * @param  NTAKVerifyStatus $status
-     * @return void
+     * @param  list<mixed>  $successfulMessages
+     * @param  list<mixed>  $unsuccessfulMessages
+     * @param  list<mixed>  $headerErrors
      */
     public function __construct(
-        array            $successfulMessages,
-        array            $unsuccessfulMessages,
-        array            $headerErrors,
-        NTAKVerifyStatus $status
+        public readonly array $successfulMessages,
+        public readonly array $unsuccessfulMessages,
+        public readonly array $headerErrors,
+        public readonly NTAKVerifyStatus $status,
+        public readonly string $processId,
     ) {
-        $this->successfulMessages   = $successfulMessages;
-        $this->unsuccessfulMessages = $unsuccessfulMessages;
-        $this->headerErrors         = $headerErrors;
-        $this->status               = $status;
     }
 
-    /**
-     * successful
-     *
-     * @return bool
-     */
     public function successful(): bool
     {
-        return $this->status == NTAKVerifyStatus::TELJESEN_SIKERES();
+        return $this->status === NTAKVerifyStatus::TELJESEN_SIKERES;
     }
 
-    /**
-     * unsuccessful
-     *
-     * @return bool
-     */
     public function unsuccessful(): bool
     {
         return ! $this->successful();

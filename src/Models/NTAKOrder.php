@@ -4,110 +4,69 @@ namespace QueSoft\Ntak\Models;
 
 use Carbon\Carbon;
 use InvalidArgumentException;
+use QueSoft\Ntak\Enums\NTAKAggregateCause;
 use QueSoft\Ntak\Enums\NTAKOrderType;
 use QueSoft\Ntak\Enums\NTAKPaymentType;
 use QueSoft\Ntak\Enums\NTAKVat;
-use QueSoft\Ntak\Enums\NTAKAmount;
-use QueSoft\Ntak\Enums\NTAKCategory;
-use QueSoft\Ntak\Enums\NTAKSubcategory;
-use QueSoft\Ntak\Enums\NTAKAggregateCause;
+use QueSoft\Ntak\NTAK;
 
 class NTAKOrder
 {
-    protected $total;
-    protected $totalWithDiscount;
-    public    $orderType;
-    public    $orderId;
-    public    $orderItems;
-    public    $ntakOrderId;
-    public    $start;
-    public    $end;
-    public    $isAtTheSpot;
-    public    $payments;
-    public    $discount;
-    public    $serviceFee;
-    public    $aggregated;
-    public    $aggregatedCause;
-    public    $tip_amount;
+    /** @var list<array<string, mixed>> */
+    protected array $serviceFeeItems = [];
+
+    protected int $drsQuantity = 0;
 
     /**
-     * __construct
-     *
-     * @param  NTAKOrderType            $orderType
-     * @param  string                   $orderId
-     * @param  array|NTAKOrderItem[]    $orderItems
-     * @param  string                   $ntakOrderId
-     * @param  Carbon                   $start
-     * @param  Carbon                   $end
-     * @param  bool                     $isAtTheSpot
-     * @param  array|null|NTAKPayment[] $payments
-     * @param  int                      $discount
-     * @param  int                      $serviceFee
-     * @param  bool                     $aggregated
-     * @param  NTAKAggregateCause       $aggregatedCause
-     * @param  int                      $tip_amount
-     * @return void
+     * @param  list<NTAKOrderItem>|null  $orderItems
+     * @param  list<NTAKPayment>|null  $payments
      */
     public function __construct(
-        NTAKOrderType       $orderType,
-        string              $orderId,
-        ?array              $orderItems = null,
-        ?string             $ntakOrderId = null,
-        ?Carbon             $start = null,
-        ?Carbon             $end = null,
-        bool                $isAtTheSpot = true,
-        ?array              $payments = null,
-        int                 $discount = 0,
-        int                 $serviceFee = 0,
-        bool                $aggregated = false,
-        NTAKAggregateCause  $aggregatedCause = null,
-        int                 $tip_amount = 0
+        public readonly NTAKOrderType $orderType,
+        public readonly string $orderId,
+        public readonly ?array $orderItems = null,
+        public readonly ?string $ntakOrderId = null,
+        public readonly ?Carbon $start = null,
+        public ?Carbon $end = null,
+        public readonly bool $isAtTheSpot = true,
+        public readonly ?array $payments = null,
+        public readonly int $discount = 0,
+        public readonly int $serviceFee = 0,
+        public readonly bool $aggregated = false,
+        public readonly ?NTAKAggregateCause $aggregatedCause = null,
+        public readonly int $tip_amount = 0,
     ) {
-        $this->orderType        = $orderType;
-        $this->orderId          = $orderId;
-        $this->orderItems       = $orderItems;
-        $this->ntakOrderId      = $ntakOrderId;
-        $this->start            = $start;
-        $this->end              = $end;
-        $this->isAtTheSpot      = $isAtTheSpot;
-        $this->payments         = $payments;
-        $this->discount         = $discount;
-        $this->serviceFee       = $serviceFee;
-        $this->aggregated       = $aggregated;
-        $this->aggregatedCause  = $aggregatedCause;
-        $this->tip_amount       = $tip_amount;
-
-        if ($orderType == NTAKOrderType::NORMAL()) {
+        if ($orderType === NTAKOrderType::NORMAL) {
             $this->validateIfNormal();
         }
-        if ($orderType != NTAKOrderType::NORMAL()) {
+        if ($orderType !== NTAKOrderType::NORMAL) {
             $this->validateIfNotNormal();
         }
-        if ($orderType != NTAKOrderType::SZTORNO()) {
+        if ($orderType !== NTAKOrderType::SZTORNO) {
             $this->validateIfNotStorno();
         }
 
-        $this->total = $this->calculateTotal();
-        $this->totalWithDiscount = $this->calculateTotalWithDiscount();
+        $this->drsQuantity = $this->drsQuantity();
+        $this->end = $end ?: Carbon::now();
     }
 
     /**
-     * buildOrderItems
-     *
-     * @return array
+     * @return list<array<string, mixed>>|null
      */
     public function buildOrderItems(): ?array
     {
         $orderItems = $this->orderItems === null
             ? null
             : array_map(
-                function(NTAKOrderItem $orderItem) {
-                    return $orderItem->buildRequest($this->isAtTheSpot);
-                },
+                fn (NTAKOrderItem $orderItem) => $orderItem->buildRequest($this->isAtTheSpot),
                 $this->orderItems
             );
 
-        if ($orderItems !== null && $this->discount > 0) {
+        if ($orderItems !== null && $this->drsQuantity > 0) {
+            $orderItems[] = NTAKOrderItem::buildDrsRequest($this->drsQuantity, $this->end);
+        }
+
+        if ($orderItems !== null && ($this->discount > 0 || $this->hasItemDiscounts())) {
             $orderItems = $this->buildDiscountRequests($orderItems);
         }
 
@@ -117,9 +76,9 @@ class NTAKOrder
 
         if ($orderItems !== null && $this->tip_amount > 0) {
             $orderItems[] = NTAKOrderItem::buildTipAmountRequest(
-                NTAKVat::C_27(),
+                NTAKVat::C_27,
                 $this->tip_amount,
-                $this->start
+                $this->start ?? $this->end
             );
         }
 
@@ -127,24 +86,19 @@ class NTAKOrder
     }
 
     /**
-     * buildPaymentTypes
-     *
-     * @return array
+     * @return list<array<string, mixed>>
      */
     public function buildPaymentTypes(): array
     {
         $payments = array_map(
-            function(NTAKPayment $payment) {
-                return $payment->buildRequest();
-            }
-            ,
-            $this->payments
+            fn (NTAKPayment $payment) => $payment->buildRequest(),
+            $this->payments ?? []
         );
 
-        foreach ($this->payments as $payment) {
+        foreach ($this->payments ?? [] as $payment) {
             if ($payment->round() !== 0) {
                 $payments[] = [
-                    'fizetesiMod'       => NTAKPaymentType::KEREKITES()->getKey(),
+                    'fizetesiMod' => NTAKPaymentType::KEREKITES->name,
                     'fizetettOsszegHUF' => $payment->round(),
                 ];
 
@@ -155,45 +109,35 @@ class NTAKOrder
         return $payments;
     }
 
-    /**
-     * total getter
-     *
-     * @return int|null
-     */
-    public function total(): ?int
+    public function paymentsTotal(): float
     {
-        return $this->total;
+        if ($this->orderType === NTAKOrderType::SZTORNO) {
+            return 0;
+        }
+
+        return array_reduce(
+            $this->payments ?? [],
+            fn (float $carry, NTAKPayment $payment) => $carry + $payment->total,
+            0.0
+        );
     }
 
-    /**
-     * totalWithDiscount getter
-     *
-     * @return int|null
-     */
-    public function totalWithDiscount(): ?int
-    {
-        return $this->totalWithDiscount;
-    }
-
-    /**
-     * validateIfNormal
-     *
-     * @return void
-     * @throws InvalidArgumentException
-     */
     protected function validateIfNormal(): void
     {
         if ($this->discount > 100) {
             throw new InvalidArgumentException('discount cannot be greater than 100');
         }
+
+        foreach ($this->orderItems ?? [] as $orderItem) {
+            if ($orderItem instanceof NTAKOrderItem
+                && $orderItem->discount !== null
+                && $orderItem->discount > 100
+            ) {
+                throw new InvalidArgumentException('order item discount cannot be greater than 100');
+            }
+        }
     }
 
-    /**
-     * validateIfNotNormal
-     *
-     * @return void
-     * @throws InvalidArgumentException
-     */
     protected function validateIfNotNormal(): void
     {
         if ($this->ntakOrderId === null) {
@@ -201,12 +145,6 @@ class NTAKOrder
         }
     }
 
-    /**
-     * validateIfNotStorno
-     *
-     * @return void
-     * @throws InvalidArgumentException
-     */
     protected function validateIfNotStorno(): void
     {
         if ($this->orderItems === null || count($this->orderItems) === 0) {
@@ -227,58 +165,49 @@ class NTAKOrder
             throw new InvalidArgumentException('end cannot be null in this case');
         }
 
-        if (count($this->payments) === 0 || $this->payments === null) {
+        if ($this->payments === null || count($this->payments) === 0) {
             throw new InvalidArgumentException('paymentType cannot be null in this case');
         }
     }
 
-    /**
-     * calculateTotal
-     *
-     * @return int
-     */
-    protected function calculateTotal(): int
+    protected function calculateDrsQuantity(?NTAKVat $vat = null): int
     {
-        if ($this->orderType != NTAKOrderType::SZTORNO()) {
-            $total = $this->totalOfOrderItems($this->orderItems);
-
-            return $total + $total * $this->serviceFee / 100 + $this->tip_amount;
+        if ($this->orderType === NTAKOrderType::SZTORNO) {
+            return 0;
         }
 
-        return 0;
+        return array_reduce(
+            $this->orderItems ?? [],
+            function (int $carry, NTAKOrderItem $orderItem) use ($vat) {
+                $isTargetVat = $vat === null || $orderItem->vat === $vat;
+
+                if ($orderItem->isDrs && $isTargetVat) {
+                    return $carry + (int) $orderItem->quantity;
+                }
+
+                return $carry;
+            },
+            0
+        );
+    }
+
+    public function drsQuantityByVat(NTAKVat $vat): int
+    {
+        return $this->calculateDrsQuantity($vat);
+    }
+
+    protected function drsQuantity(): int
+    {
+        return $this->calculateDrsQuantity();
     }
 
     /**
-     * calculateTotalWithDiscount
-     *
-     * @return int
-     */
-    protected function calculateTotalWithDiscount(): int
-    {
-        if ($this->discount === 0) {
-            return $this->total;
-        }
-
-        if ($this->orderType != NTAKOrderType::SZTORNO()) {
-            $total = $this->totalOfOrderItemsWithDiscount($this->orderItems);
-
-            return $total + $total * $this->serviceFee / 100 + $this->tip_amount;
-        }
-
-        return 0;
-    }
-
-    /**
-     * buildDiscountRequests
-     *
-     * @param  array $orderItems
-     * @return array
+     * @param  list<array<string, mixed>>  $orderItems
+     * @return list<array<string, mixed>>
      */
     protected function buildDiscountRequests(array $orderItems): array
     {
-        $vats = $this->uniqueVats();
-
-        foreach ($vats as $vat) {
+        foreach ($this->uniqueVats() as $vat) {
             $orderItems = $this->addDiscountRequestByVat($orderItems, $vat);
         }
 
@@ -286,135 +215,159 @@ class NTAKOrder
     }
 
     /**
-     * buildServiceFeeRequests
-     *
-     * @param  array $orderItems
-     * @return array
+     * @param  list<array<string, mixed>>  $orderItems
+     * @return list<array<string, mixed>>
      */
     protected function buildServiceFeeRequests(array $orderItems): array
     {
-        $vats = $this->uniqueVats();
-
-        foreach ($vats as $vat) {
-            $orderItems = $this->addServiceFeeRequestByVat($orderItems, $vat);
+        foreach ($this->uniqueVats() as $vat) {
+            $orderItems = $this->addServiceFeeRequestByVat(
+                $orderItems,
+                $vat,
+                $this->drsQuantityByVat($vat)
+            );
         }
 
         return $orderItems;
     }
 
     /**
-     * addDiscountRequestByVat
-     *
-     * @param  array   $orderItems
-     * @param  NTAKVat $vat
-     * @return array
+     * @param  list<array<string, mixed>>  $orderItems
+     * @return list<array<string, mixed>>
      */
     protected function addDiscountRequestByVat(array $orderItems, NTAKVat $vat): array
     {
-        $orderItemsWithVat = $this->orderItemsWithVat($vat);
+        $totalRoundedDiscount = 0;
 
-        $totalOfOrderItems = $this->totalOfOrderItems($orderItemsWithVat);
-        $totalOfOrderItemsWithDiscount = $this->totalOfOrderItemsWithDiscount($orderItemsWithVat);
+        foreach ($this->orderItemsWithVat($vat) as $item) {
+            $roundedOriginal = $item->roundedSum();
+            $roundedDiscounted = (int) round($item->discountedRawSum($this->discount));
 
-        $orderItems[] = NTAKOrderItem::buildDiscountRequest(
-            $vat,
-            $totalOfOrderItemsWithDiscount - $totalOfOrderItems,
-            $this->end
-        );
+            $totalRoundedDiscount += ($roundedOriginal - $roundedDiscounted);
+        }
+
+        if ($vat === NTAKVat::E_0 && $this->drsQuantity > 0) {
+            $totalRoundedDiscount += $this->drsRoundedDiscount();
+        }
+
+        if ($totalRoundedDiscount > 0) {
+            $orderItems[] = NTAKOrderItem::buildDiscountRequest(
+                $vat,
+                -$totalRoundedDiscount,
+                $this->end
+            );
+        }
 
         return $orderItems;
     }
 
+    protected function hasItemDiscounts(): bool
+    {
+        foreach ($this->orderItems ?? [] as $orderItem) {
+            if ($orderItem->discount !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function drsRoundedDiscount(): int
+    {
+        if (! $this->hasItemDiscounts()) {
+            $drsTotalOriginal = $this->drsQuantity * NTAK::DRS_AMOUNT;
+            $drsTotalDiscounted = (int) round($drsTotalOriginal * (1 - $this->discount / 100));
+
+            return $drsTotalOriginal - $drsTotalDiscounted;
+        }
+
+        $totalRoundedDiscount = 0;
+
+        foreach ($this->orderItems ?? [] as $orderItem) {
+            if (! $orderItem->isDrs) {
+                continue;
+            }
+
+            $drsTotalOriginal = $orderItem->quantity * NTAK::DRS_AMOUNT;
+            $drsTotalDiscounted = (int) round(
+                $drsTotalOriginal * (1 - $orderItem->effectiveDiscount($this->discount) / 100)
+            );
+
+            $totalRoundedDiscount += ($drsTotalOriginal - $drsTotalDiscounted);
+        }
+
+        return $totalRoundedDiscount;
+    }
+
     /**
-     * addServiceFeeRequestByVat
-     *
-     * @param  array   $orderItems
-     * @param  NTAKVat $vat
-     * @return array
+     * @param  list<array<string, mixed>>  $orderItems
+     * @return list<array<string, mixed>>
      */
-    protected function addServiceFeeRequestByVat(array $orderItems, NTAKVat $vat): array
+    protected function addServiceFeeRequestByVat(array $orderItems, NTAKVat $vat, int $drsQuantity): array
     {
         $orderItemsWithVat = $this->orderItemsWithVat($vat);
-
         $totalOfOrderItemsWithDiscount = $this->totalOfOrderItemsWithDiscount($orderItemsWithVat);
+        $serviceFeeAmount = (int) round($totalOfOrderItemsWithDiscount * $this->serviceFee / 100);
 
-        $orderItems[] = NTAKOrderItem::buildServiceFeeRequest(
+        if ($serviceFeeAmount <= 0) {
+            return $orderItems;
+        }
+
+        $serviceFeeItem = NTAKOrderItem::buildServiceFeeRequest(
             $vat,
-            $totalOfOrderItemsWithDiscount * $this->serviceFee / 100,
+            $serviceFeeAmount,
             $this->end
         );
+
+        $orderItems[] = $serviceFeeItem;
+        $this->serviceFeeItems[] = $serviceFeeItem;
 
         return $orderItems;
     }
 
     /**
-     * orderItemsWithVat
-     *
-     * @param  NTAKVat $vat
-     * @return array
+     * @return list<NTAKOrderItem>
      */
     protected function orderItemsWithVat(NTAKVat $vat): array
     {
-        return array_filter(
-            $this->orderItems,
-            function(NTAKOrderItem $orderItem) use($vat) {
-                return $orderItem->vat == $vat;
-            }
-        );
+        return array_values(array_filter(
+            $this->orderItems ?? [],
+            fn (NTAKOrderItem $orderItem) => $orderItem->vat === $vat
+        ));
     }
 
     /**
-     * totalOfOrderItems
-     *
-     * @param  array $orderItems
-     * @return int
+     * @param  list<NTAKOrderItem>  $orderItems
      */
-    protected function totalOfOrderItems(array $orderItems): int
+    protected function totalOfOrderItemsWithDiscount(array $orderItems): float
     {
         return array_reduce(
             $orderItems,
-            function (int $carry, NTAKOrderItem $orderItem) {
-                return $carry + $orderItem->price * $orderItem->quantity;
+            function (float $carry, NTAKOrderItem $orderItem) {
+                if ($orderItem->bypassServiceFee) {
+                    return $carry;
+                }
+
+                return $carry + $orderItem->discountedRawSum($this->discount);
             },
-            0
+            0.0
         );
     }
 
     /**
-     * totalOfOrderItemsWithDiscount
-     *
-     * @param  array|NTAKOrderItem[] $orderItems
-     * @return int
-     */
-    protected function totalOfOrderItemsWithDiscount(array $orderItems): int
-    {
-        return array_reduce(
-            $orderItems,
-            function (int $carry, NTAKOrderItem $orderItem) {
-                $price = ($orderItem->price * $orderItem->quantity) *
-                         (1 - $this->discount / 100);
-
-                return $carry + $price;
-            },
-            0
-        );
-    }
-
-    /**
-     * uniqueVats
-     *
-     * @return array
+     * @return list<NTAKVat>
      */
     protected function uniqueVats(): array
     {
-        return array_unique(
-            array_map(
-                function(NTAKOrderItem $orderItem) {
-                    return $orderItem->vat;
-                },
-                $this->orderItems
-            ),
-            SORT_REGULAR
+        $vats = array_map(
+            fn (NTAKOrderItem $orderItem) => $orderItem->vat,
+            $this->orderItems ?? []
         );
+
+        if ($this->drsQuantity > 0) {
+            $vats[] = NTAKVat::E_0;
+        }
+
+        return array_values(array_unique($vats, SORT_REGULAR));
     }
 }

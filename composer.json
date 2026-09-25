@@ -1,12 +1,9 @@
 {
     "name": "quesoft/ntak-php",
-    "description": "An easy to use NTAK PHP Api (for PHP 7.1)",
+    "description": "An easy to use NTAK PHP API / SDK (PHP 8.4+)",
+    "version": "1.4.0",
     "license": "MIT",
-    "autoload": {
-        "psr-4": {
-            "QueSoft\\Ntak\\": "src/"
-        }
-    },
+    "type": "library",
     "authors": [
         {
             "name": "QueSoft IT",
@@ -14,16 +11,33 @@
         }
     ],
     "require": {
-        "php": "^7.1",
-        "guzzlehttp/guzzle": "*",
-        "nesbot/carbon": "^2.66",
-        "gamegos/jws": "^1.0",
-        "myclabs/php-enum": "^1.7.7"
+        "php": "^8.4",
+        "ext-json": "*",
+        "ext-openssl": "*",
+        "guzzlehttp/guzzle": "^7.10",
+        "nesbot/carbon": "^3.0",
+        "gamegos/jws": "^1.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^7.5.20",
-        "symfony/var-dumper": "^4.4.47",
-        "tightenco/collect": "^8.0.4",
-        "ramsey/uuid": "^3.9.7"
-    }
+        "phpunit/phpunit": "^11.5",
+        "ramsey/uuid": "^4.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "QueSoft\\Ntak\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "QueSoft\\Ntak\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

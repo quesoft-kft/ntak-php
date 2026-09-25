@@ -1,67 +1,50 @@
-# NTAK RMS PHP API / SDK (FOR PHP 7.1)
+# NTAK RMS PHP API / SDK — v1.4 (PHP 8.4+)
 
-**This is a fork from [https://github.com/Natsu007/ntak-php](https://github.com/Natsu007/ntak-php) repostitory. We want to extend it some other functions. I hope it helps others. Readme.md is maintained. I left the other parts in their original form. We will merge the new developments of original repo.**
+Fork of [kiralyta/ntak-php](https://github.com/kiralyta/ntak-php) with QueSoft extensions (aggregated orders, tip handling, message resend) and PHP 8.4 / 8.5 support.
 
-**Orginal repo [https://github.com/kiralyta/ntak-php](https://github.com/kiralyta/ntak-php), thanks for sharing the solution**
-
-****
-
-This helps you make NTAK RMS requests like a boss.
-
-Table of Contents:
-- [Installation](#installation)
-- [Usage](#usage)
-    - [Create an API Client Instance](#create-an-api-client-instance)
-    - [Create an Order Item Instance](#create-an-order-item-instance)
-    - [Create a Payment Instance](#create-a-payment-instance)
-    - [Create an Order Instance](#create-an-order-instance)
-    - [Store, Update, Destroy Order (Rendelésösszesítő)](#store-update-destroy-order-rendelésösszesítő)
-    - [Close Day (Napzárás)](#close-day-napzárás)
-    - [Verify (Ellenőrzés)](#verify-ellenőrzés)
-- [Enums](#enums)
-- [Contribution](#contribution)
-- [Last Words](#last-words)
+Requires **PHP 8.4 or newer** (compatible with PHP 8.5).
 
 ## Installation
 
-``` bash
-composer require quesoft/ntak-php
+```bash
+composer require quesoft/ntak-php:^1.4
 ```
+
+## Upgrade to 1.4
+
+**Breaking release.** A fogyasztó kódban tipikusan át kell írni az enum hívásokat (`::CASE()` → `::CASE`), a `getKey()` hívásokat (`->name`), és a `new Enum($value)` konstruktorokat (`Enum::from()`).
+
+Részletes checklist: **[CHANGELOG.md — Upgrade notes](CHANGELOG.md#upgrade-notes--mire-kell-figyelni)**.
 
 ## Usage
 
-### Instances
+### Create an API client
 
-#### Create an API Client Instance
-
-``` php
+```php
 use QueSoft\Ntak\NTAKClient;
 
 $client = new NTAKClient(
-    taxNumber:         'NTAK client tax nr',         // without `-` chars
-    regNumber:         'NTAK client registration nr',
+    taxNumber: 'NTAK client tax nr',         // without `-` chars
+    regNumber: 'NTAK client registration nr',
     softwareRegNumber: 'NTAK RMS registration id',
-    version:           'NTAK RMS version',
-    certPath:          '/path/to/your.pem',
-    testing:           false                         // whether to hit the test NTAK API
+    version: 'NTAK RMS version',
+    certPath: '/path/to/your.pem',
+    testing: false                           // hit the test NTAK API when true
 );
 ```
 
-> Your ```.pem``` file is basically a concatenated file of your ```.cer``` and ```.key``` files.
->
-> It is recommended to have a singleton ```NTAKClient``` instance during one request cycle. This means, you can create multiple requests with a single ```NTAKClient``` instance.
+> Your `.pem` file is a concatenation of your `.cer` and `.key` files.
+> Prefer a singleton `NTAKClient` per request cycle.
 
-You can get the last request, response and respone time (in milliseconds) from the client.
-
-``` php
-$client->lastRequest();     // Returns an array
-$client->lastResponse();    // Returns an array
-$client->lastRequestTime(); // Returns an integer
+```php
+$client->lastRequest();     // array|null
+$client->lastResponse();    // array|null
+$client->lastRequestTime(); // int|null (ms)
 ```
 
-#### Create an Order Item Instance
+### Order item
 
-``` php
+```php
 use Carbon\Carbon;
 use QueSoft\Ntak\Enums\NTAKAmount;
 use QueSoft\Ntak\Enums\NTAKCategory;
@@ -70,316 +53,149 @@ use QueSoft\Ntak\Enums\NTAKVat;
 use QueSoft\Ntak\Models\NTAKOrderItem;
 
 $orderItem = new NTAKOrderItem(
-    name:            'Absolut Vodka',               // Any kind of string
-    category:        NTAKCategory::ALKOHOLOSITAL(), // Main category
-    subcategory:     NTAKSubcategory::PARLAT(),     // Subcategory
-    vat:             NTAKVat::C_27(),
-    price:           1000,
-    amountType:      NTAKAmount::LITER(),
-    amount:          0.04,
-    quantity:        2,
-    when:            Carbon::now()
+    name: 'Absolut Vodka',
+    category: NTAKCategory::ALKOHOLOSITAL,
+    subcategory: NTAKSubcategory::PARLAT,
+    vat: NTAKVat::C_27,
+    price: 1000,
+    amountType: NTAKAmount::LITER,
+    amount: 0.04,
+    quantity: 2,
+    when: Carbon::now(),
+    isDrs: false,            // DRS deposit (50 Ft) when true
+    bypassServiceFee: false, // exclude from service fee base
+    discount: null,          // item-level %; null → inherit order discount
 );
 ```
 
-> - [NTAKCategory](#ntakcategory)
-> - [NTAKSubcategory](#ntaksubcategory)
-> - [NTAKVat](#ntakvat)
-> - [NTAKAmount](#ntakamount)
+### Payment
 
-#### Create a Payment Instance
-
-``` php
+```php
 use QueSoft\Ntak\Enums\NTAKPaymentType;
 use QueSoft\Ntak\Models\NTAKPayment;
 
 $payment = new NTAKPayment(
-    paymentType:     NTAKPaymentType::BANKKARTYA(),
-    total:           2000 // Total payed with this method type
+    paymentType: NTAKPaymentType::BANKKARTYA,
+    total: 2000
 );
 ```
 
-> - [NTAKPaymentType](#ntakpaymenttype)
+Cash (`KESZPENZHUF` / `KESZPENZEUR`) is rounded to 5 Ft; the difference is sent as `KEREKITES`.
 
-#### Create an Order Instance
+### Order
 
-``` php
+```php
 use Carbon\Carbon;
-use QueSoft\Ntak\Enums\NTAKOrderType;
 use QueSoft\Ntak\Enums\NTAKAggregateCause;
-use QueSoft\Ntak\Models\NTAKOrderItem;
+use QueSoft\Ntak\Enums\NTAKOrderType;
 use QueSoft\Ntak\Models\NTAKOrder;
-use QueSoft\Ntak\Models\NTAKPayment;
 
 $order = new NTAKOrder(
-    orderType:   NTAKOrderType::NORMAL(),       // You can control whether to store, update, or destroy an order
-    orderId:     'your-rms-order-id',           // RMS Order ID
-    orderItems:  [new NTAKOrderItem(...)],      // Array of the order items
-    start:       Carbon::now()->addMinutes(-7), // Start of the order
-    end:         Carbon::now(),                 // End of the order
-    payments:    [new NTAKPayment(...)],        // Array of the payments
-
-    // Take away handled automatically
-    // Vat changed to 27 in all OrderItems that have a category "Helyben készített alkoholmentes ital" in case of isAtTheSpot is false
+    orderType: NTAKOrderType::NORMAL,
+    orderId: 'your-rms-order-id',
+    orderItems: [$orderItem],
+    start: Carbon::now()->subMinutes(7),
+    end: Carbon::now(),
+    payments: [$payment],
     isAtTheSpot: true,
-
-    // Discount and service fee are automatically managed by the package
-    // You don't have to manually add the OrderItem(s) with "KEDVEZMENY" / "SZERVIZDIJ" subcategories
-    // Vats are handled automatically as well
-    // If both discount and service fee are provided, the service fee will be calculated from the discounted total
-    // The following means 20% discount (defaults to 0) and 10% service fee (defaults to 0)
-    discount:    20,
-    serviceFee:  10,
-
-    // Only on update / destroy
-    ntakOrderId: 'your-previous-order-id',
-
-    aggregated: false, // Is order aggregated
-    aggregatedCause: NTAKAggregateCause::UZEMSZUNET_ARAMSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT(), // If aggregated, It's cause. Defaults to null
-
-    tip_amount: 0, //added to order as BORRAVALO type. Calculation order is items total, then discount, then service fee + tip_amount
+    discount: 20,      // order-level %
+    serviceFee: 10,    // % of discounted total (respects bypassServiceFee)
+    ntakOrderId: null, // required for update / storno
+    aggregated: false,
+    aggregatedCause: NTAKAggregateCause::UZEMSZUNET_ARAMSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT,
+    tip_amount: 0,     // added as BORRAVALO line
 );
 ```
 
-> When you are updating / destroying an order, you need to provide (generate) a new `orderId` with each requests.
->
-> In these cases, the `ntakOrderId` is always the last provided `orderId`.
+Pricing notes (aligned with upstream):
 
-> - [NTAKOrderType](#ntakordertype)
-> - [NTAKOrderItem](#create-an-order-item-instance)
-> - [NTAKPayment](#create-a-payment-instance)
+- Line totals, discounts and service fees are rounded per VAT group.
+- DRS is emitted as a separate `E_0` / `KORNYEZETBARAT_CSOMAGOLAS` line.
+- Item-level `discount` overrides the order-level rate for that item (including its DRS).
+- `rendelesVegosszegeHUF` is the sum of payments (`paymentsTotal()`).
 
-### Messages (Requests)
+### Store / update / destroy order
 
-#### Store, Update, Destroy Order (Rendelésösszesítő)
-
-``` php
+```php
 use Carbon\Carbon;
-use QueSoft\Ntak\Models\NTAKOrder;
-use QueSoft\Ntak\Models\NTAKPayment;
 use QueSoft\Ntak\NTAK;
 
 $processId = NTAK::message($client, Carbon::now())
-    ->handleOrder(new NTAKOrder(...));
+    ->handleOrder($order);
 ```
 
-> Returns the NTAK process ID string.
->
-> - [NTAKOrder](#create-an-order-instance)
+### Resend message
 
-#### Resend Message (Újraküldés - Rendelésösszesítők/Napzárás)
-
-> Resend previously sent message.
-> Requires decoded array contents from 
-> previously sent request's lastRequest message.
-> Useful when you need to resend order or close by verify request.
-> IMPORTANT to set message object when parameter to exactly the same timestamp of previous message!
-
-``` php
-use Carbon\Carbon;
-use QueSoft\Ntak\NTAK;
-
-$processId = NTAK::message($client, Carbon::parse($lastSentRequestData["uzenetAdatok"]["uzenetKuldesIdeje"]))
-    ->resendMessage(["zarasiInformaciok" => $lastSentRequestData["zarasiInformaciok"]], false);
-
-$processId = NTAK::message($client, Carbon::parse($lastSentRequestData["uzenetAdatok"]["uzenetKuldesIdeje"]))
-    ->resendMessage(["zarasiInformaciok" => $lastSentRequestData["zarasiInformaciok"]]);
+```php
+$processId = NTAK::message(
+    $client,
+    Carbon::parse($lastSentRequestData['uzenetAdatok']['uzenetKuldesIdeje'])
+)->resendMessage(
+    ['zarasiInformaciok' => $lastSentRequestData['zarasiInformaciok']],
+    order: false // true = rendeles-osszesito, false = napi-zaras
+);
 ```
 
-> Returns the NTAK process ID string.
+### Close day
 
-
-#### Close Day (Napzárás)
-
-``` php
-use Carbon\Carbon;
+```php
 use QueSoft\Ntak\Enums\NTAKDayType;
-use QueSoft\Ntak\NTAK;
 
-$processId = NTAK::message($client, Carbon::now())
-    ->closeDay(
-        start:   Carbon::now()->addHours(-10), // Opening time (nullable)
-        end:     Carbon::now(),                // Closing time (nullable)
-        dayType: NTAKDayType::NORMAL_NAP(),      // Day type
-        tips:    1000                          // Tips (default 0)
-    );
+$processId = NTAK::message($client, Carbon::now())->closeDay(
+    start: Carbon::now()->subHours(10),
+    end: Carbon::now(),
+    dayType: NTAKDayType::NORMAL_NAP,
+    tips: 1000
+);
 ```
 
-> Returns the NTAK process ID string.
->
-> - [NTAKDayType](#ntakdaytype)
+### Verify
 
-#### Verify (Ellenőrzés)
-
-``` php
-use Carbon\Carbon;
-use QueSoft\Ntak\Enums\NTAKDayType;
-use QueSoft\Ntak\NTAK;
-
+```php
 $response = NTAK::message($client, Carbon::now())
-    ->verify(
-        processId: 'NTAK Process ID'
-    );
+    ->verify(processId: 'NTAK Process ID');
+
+$responses = NTAK::message($client, Carbon::now())
+    ->verifyAll(['id-1', 'id-2']);
+
+$response->successful();
+$response->unsuccessful();
+$response->status;
+$response->processId;
+$response->successfulMessages;
+$response->unsuccessfulMessages;
+$response->headerErrors;
 ```
-
-> Returns an ```NTAKVerifyResponse``` instance
-
-``` php
-$response->successful();         // Check whether our message was processed successfully
-$response->unsuccessful();       // Check whether our message was processed unsuccessfully
-$response->status;               // Returns an NTAKVerifyStatus
-$response->successfulMessages;   // Returns an array of the successful messages
-$response->unsuccessfulMessages; // Returns an array of the unsuccessful messages
-$response->headerErrors;         // Returns an array of the header errors
-```
-
-> If you encounter an unsuccessful message, you should further examine [NTAKVerifyStatus](#ntakverifystatus).
-> It's recommended to wait at least 60 seconds before the first verification attempt of a processs ID.
 
 ## Enums
 
-Namespace of the enums:
+Namespace: `QueSoft\Ntak\Enums`
 
-``` php
-namespace QueSoft\Ntak\Enums;
-```
-
-You can use the ```values()``` static method on any of the enums, in order to get the available values.
+Helpers on each enum: `cases()`, `names()`, `values()`, `array()`, `random()`, `fromName()`, `from()`.
 
 ### NTAKAmount
 
-| name      | value ***string*** |
-| --------  | ---------          |
-| DARAB     | darab              |
-| LITER     | liter              |
-| KILOGRAMM | kilogramm          |
-| EGYSEG    | egyseg             |
+| name | value |
+| --- | --- |
+| DARAB | darab |
+| LITER | liter |
+| KILOGRAMM | kilogramm |
+| EGYSEG | egyseg |
+| ADAG | adag |
 
-### NTAKCategory
+### NTAKCategory / NTAKSubcategory / NTAKDayType / NTAKOrderType / NTAKPaymentType / NTAKVat / NTAKVerifyStatus / NTAKAggregateCause
 
-| name                      | value ***string***                       |
-| --------                  | -----------------                        |
-| ETEL                      | Étel                                     |
-| ALKMENTESITAL_HELYBEN     | Helyben készített alkoholmentes ital     |
-| ALKMENTESITAL_NEM_HELYBEN | Nem helyben készített alkoholmentes ital |
-| ALKOHOLOSITAL             | Alkoholos Ital                           |
-| EGYEB                     | Egyéb                                    |
+See source under `src/Enums/` for the full case lists (including aggregated-order causes kept from this fork).
 
-### NTAKSubcategory
+## Development
 
-| name                      | value ***string***                              |
-| --------                  | ---------                                       |
-| REGGELI                   | reggeli                                         |
-| SZENDVICS                 | szendvics                                       |
-| ELOETEL                   | előétel                                         |
-| LEVES                     | leves                                           |
-| FOETEL                    | főétel                                          |
-| KORET                     | köret                                           |
-| SAVANYUSAG_SALATA         | savanyúság/saláta                               |
-| KOSTOLO                   | kóstolóétel, kóstolófalat                       |
-| PEKSUTEMENY               | péksütemény, pékáru                             |
-| DESSZERT                  | desszert                                        |
-| SNACK                     | snack                                           |
-| FOETEL_KORETTEL           | főétel körettel                                 |
-| ETELCSOMAG                | ételcsomag                                      |
-| EGYEB                     | egyéb                                           |
-| VIZ                       | víz                                             |
-| LIMONADE_SZORP_FACSART    | limonádé / szörp / frissen facsart ital         |
-| ALKOHOLMENTES_KOKTEL      | alkoholmentes koktél, alkoholmentes kevert ital |
-| TEA_FORROCSOKOLADE        | tea, forrócsoki és egyéb tejalapú italok        |
-| ITALCSOMAG                | italcsomag                                      |
-| KAVE                      | kávé                                            |
-| ROSTOS_UDITO              | rostos üdítő                                    |
-| SZENSAVAS_UDITO           | szénsavas üdítő                                 |
-| SZENSAVMENTES_UDITO       | szénsavmentes üdítő                             |
-| KOKTEL                    | koktél, kevert ital                             |
-| LIKOR                     | likőr                                           |
-| PARLAT                    | párlat                                          |
-| SOR                       | sör                                             |
-| BOR                       | bor                                             |
-| PEZSGO                    | pezsgő                                          |
-| SZERVIZDIJ                | szervizdíj                                      |
-| BORRAVALO                 | borravaló                                       |
-| KISZALLITASI_DIJ          | kiszállítási díj                                |
-| NEM_VENDEGLATAS           | nem vendéglátás                                 |
-| KORNYEZETBARAT_CSOMAGOLAS | környezetbarát csomagolás                       |
-| MUANYAG_CSOMAGOLAS        | műanyag csomagolás                              |
-| KEDVEZMENY                | kedvezmény                                      |
-
-### NTAKDayType
-
-| name                 | value ***string***   |
-| --------             | -----------------    |
-| ADOTT_NAPON_ZARVA    | Adott napon zárva    |
-| FORGALOM_NELKULI_NAP | Forgalom nélküli nap |
-| NORMAL_NAP           | Normál nap           |
-
-### NTAKOrderType
-
-| name       | value ***string*** |
-| --------   | -----------------  |
-| NORMAL     | Normál             |
-| SZTORNO    | Storno             |
-| HELYESBITO | Helyesbítő         |
-
-### NTAKPaymentType
-
-| name        | value ***string*** |
-| --------    | -----------------  |
-| KESZPENZHUF | Készpénz huf       |
-| KESZPENZEUR | Készpénz eur       |
-| SZEPKARTYA  | Szépkártya         |
-| BANKKARTYA  | Bankkártya         |
-| ATUTALAS    | Átutalás           |
-| EGYEB       | Egyéb              |
-| VOUCHER     | Voucher            |
-| SZOBAHITEL  | Szobahitel         |
-| KEREKITES   | Kerekítés          |
-
-### NTAKVat
-
-| name  | value ***string*** |
-| ----- | -----------------  |
-| A_5   | 5%                 |
-| B_18  | 18%                |
-| C_27  | 27%                |
-| D_AJT | Ajt                |
-| E_0   | 0%                 |
-
-### NTAKVerifyStatus
-
-| name             | value ***string*** |
-| --------         | ---------          |
-| BEFOGADVA        | BEFOGADVA          |
-| TELJESEN_HIBAS   | TELJESEN_HIBAS     |
-| RESZBEN_SIKERES  | RESZBEN_SIKERES    |
-| TELJESEN_SIKERES | TELJESEN_SIKERES   |
-| UJRA_KULDENDO    | UJRA_KULDENDO      |
-
-### NTAKAggregateCause
-
-| name                                                       | value ***string***                                         |
-| --------------------------------------------------------   | ---------------------------------------------------------  |
-| UZEMSZUNET_ARAMSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT     | UZEMSZUNET_ARAMSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT     |
-| UZEMSZUNET_INTERNETSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT | UZEMSZUNET_INTERNETSZOLGALTATAS_TERVEZETT_KIMARADASA_MIATT |
-| UZEMZAVAR_ARAMSZOLGALTATAS_ATMENETI_KIMARADASA_MIATT       | UZEMZAVAR_ARAMSZOLGALTATAS_ATMENETI_KIMARADASA_MIATT       |
-| UZEMZAVAR_INTERNETSZOLGALTATAS_ATMENETI_KIMARADASA_MIATT   | UZEMZAVAR_INTERNETSZOLGALTATAS_ATMENETI_KIMARADASA_MIATT   |
-| UZEMZAVAR_TERMESZETI_KATASZTROFA_MIATT                     | UZEMZAVAR_TERMESZETI_KATASZTROFA_MIATT                     |
-| UZEMZAVAR_LEJART_TANUSITVANY_MIATT                         | UZEMZAVAR_LEJART_TANUSITVANY_MIATT                         |
-| UZEMZAVAR_MUSZAKI_HIBA_MIATT                               | UZEMZAVAR_MUSZAKI_HIBA_MIATT                               |
-
-## Contribution
-
-``` bash
-git clone git@github.com:quesoft-it/ntak-php.git
-cd ntak-php
-composer install --dev
+```bash
+composer install
+composer test
 ```
 
-### Run Tests
+Unit / pricing tests do not need certificates. Integration against the live test API still needs `auth/pem.pem`.
 
-Put your ```cer.cer``` and ```pem.pem``` files in ```./auth``` directory, then run:
+## License
 
-``` bash
-vendor/bin/phpunit src/Tests
-```
+MIT
