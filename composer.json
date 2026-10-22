@@ -1,6 +1,6 @@
 {
     "name": "quesoft/ntak-php",
-    "description": "An easy to use NTAK PHP Api (for PHP 7.1)",
+    "description": "An easy to use NTAK PHP Api (PHP 7.4 – 8.x dual)",
     "license": "MIT",
     "autoload": {
         "psr-4": {
@@ -14,8 +14,8 @@
         }
     ],
     "require": {
-        "php": "^7.1",
-        "guzzlehttp/guzzle": "*",
+        "php": "^7.4 || ^8.0",
+        "guzzlehttp/guzzle": "^7.0",
         "nesbot/carbon": "^2.66",
         "gamegos/jws": "^1.0",
         "myclabs/php-enum": "^1.7.7"
