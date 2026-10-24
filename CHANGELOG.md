@@ -2,6 +2,13 @@
 
 All notable changes to this package are documented in this file.
 
+## 1.4.1
+
+### Bugfix
+
+- **`targynap` UTC elcsúszás (Carbon 3):** `closeDay()` / `handleOrder()` a `targynap` mezőt `$carbon->format('Y-m-d')`-del számolta timezone konverzió nélkül. Carbon 3-ban a `createFromTimestamp()` alapból **UTC**-ben marad, ezért Budapesten éjfél körül a tárgynap **előző napra** esett, miközben `nyitasIdopontja` / rendelés időpontok `Europe/Budapest` ISO-ként mentek. NTAK válasz: `Future` — „A mező időpontja nem lehet jövőbeli!” a `zarasiInformaciok.nyitasIdopontja` mezőn.
+- Javítás: `targynap` mindig `$carbon->timezone('Europe/Budapest')->format('Y-m-d')`.
+
 ## 1.4.0
 
 PHP 8.4+ modernization. **This is a breaking release** relative to 1.x builds that still targeted PHP 7 / MyCLabs enums.

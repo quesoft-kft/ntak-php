@@ -60,7 +60,8 @@ class NTAK
                 'hivatkozottRendelesOsszesito' => $ntakOrder->orderType === NTAKOrderType::NORMAL
                     ? null
                     : $ntakOrder->ntakOrderId,
-                'targynap' => $ntakOrder->end->format('Y-m-d'),
+                // Carbon 3: createFromTimestamp() UTC-ben marad → format() előző napot adhat BP éjfél körül
+                'targynap' => $ntakOrder->end->timezone('Europe/Budapest')->format('Y-m-d'),
                 'rendelesKezdete' => $ntakOrder->orderType === NTAKOrderType::SZTORNO
                     ? null
                     : $ntakOrder->start->timezone('Europe/Budapest')->toIso8601String(),
@@ -119,7 +120,8 @@ class NTAK
     ): string {
         $message = [
             'zarasiInformaciok' => [
-                'targynap' => $start->format('Y-m-d'),
+                // Carbon 3: createFromTimestamp() UTC-ben marad → format() előző napot adhat BP éjfél körül
+                'targynap' => $start->timezone('Europe/Budapest')->format('Y-m-d'),
                 'targynapBesorolasa' => $dayType->name,
                 'nyitasIdopontja' => $dayType !== NTAKDayType::ADOTT_NAPON_ZARVA
                     ? $start->timezone('Europe/Budapest')->toIso8601String()

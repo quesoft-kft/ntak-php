@@ -1,7 +1,7 @@
 {
     "name": "quesoft/ntak-php",
     "description": "An easy to use NTAK PHP API / SDK (PHP 8.4+)",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "license": "MIT",
     "type": "library",
     "authors": [

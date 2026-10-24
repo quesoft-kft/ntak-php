@@ -1,4 +1,4 @@
-# NTAK RMS PHP API / SDK — v1.4 (PHP 8.4+)
+# NTAK RMS PHP API / SDK — v1.4.1 (PHP 8.4+)
 
 Fork of [kiralyta/ntak-php](https://github.com/kiralyta/ntak-php) with QueSoft extensions (aggregated orders, tip handling, message resend) and PHP 8.4 / 8.5 support.
 
@@ -12,9 +12,11 @@ composer require quesoft/ntak-php:^1.4
 
 ## Upgrade to 1.4
 
-**Breaking release.** A fogyasztó kódban tipikusan át kell írni az enum hívásokat (`::CASE()` → `::CASE`), a `getKey()` hívásokat (`->name`), és a `new Enum($value)` konstruktorokat (`Enum::from()`).
+**Breaking release (1.4.0).** A fogyasztó kódban tipikusan át kell írni az enum hívásokat (`::CASE()` → `::CASE`), a `getKey()` hívásokat (`->name`), és a `new Enum($value)` konstruktorokat (`Enum::from()`).
 
 Részletes checklist: **[CHANGELOG.md — Upgrade notes](CHANGELOG.md#upgrade-notes--mire-kell-figyelni)**.
+
+**1.4.1:** a `targynap` mezőt a lib `Europe/Budapest` szerint formázza (Carbon 3 UTC elcsúszás ellen). Fogyasztói oldalon is ajánlott: `Carbon::createFromTimestamp($ts, 'Europe/Budapest')`.
 
 ## Usage
 
